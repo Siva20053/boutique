@@ -1,18 +1,11 @@
 import React from "react";
-import {
-  GoogleAuthProvider,
-  getAuth,
-  signInWithPopup,
-  signOut,
-} from "firebase/auth";
-import { ToastContainer, toast } from "react-toastify";
-import { useDispatch, useSelector } from "react-redux";
-import { addUser, removeUser } from "../redux/bazarSlice";
+import { GoogleAuthProvider, getAuth, signInWithPopup } from "firebase/auth";
+import { useDispatch } from "react-redux";
+import { addUser } from "../redux/bazarSlice";
 import { useNavigate } from "react-router-dom";
-import { githubLogo, googleLogo } from "../assets";
+import { googleLogo } from "../assets";
 
 const Login = () => {
-  const userInfo = useSelector((state) => state.bazar.userInfo);
   const navigate = useNavigate("");
   const dispatch = useDispatch();
   const auth = getAuth();
@@ -44,19 +37,6 @@ const Login = () => {
       });
   };
   // ============== Google Login End here =======================
-  // ============== Logout Start here ===========================
-  const handleSignOut = () => {
-    signOut(auth)
-      .then(() => {
-        // Sign-out successful.
-        toast.success("Log Out Successfully!");
-        dispatch(removeUser());
-      })
-      .catch((error) => {
-        console.log(error);
-      });
-  };
-  // ============== Logout End here =============================
   return (
     <div className="w-full min-h-[calc(100vh-4rem)] sm:min-h-[calc(100vh-5rem)] px-4 py-8 flex items-center justify-center">
       <div className="w-full max-w-sm min-h-72 sm:min-h-80 bg-white shadow-lg rounded-lg flex flex-col items-center justify-center gap-4 px-5 py-8">

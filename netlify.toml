@@ -1,0 +1,13 @@
+[build]
+  # The React app lives in client/; setting it as the base directory makes
+  # Netlify build from there. Dependencies are installed explicitly in the
+  # command so they are present regardless of how the build is triggered.
+  base = "client"
+  command = "npm install && npm run build"
+  publish = "build"
+
+# Serve index.html for client-side routes handled by React Router.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
