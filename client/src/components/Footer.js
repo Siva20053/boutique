@@ -1,5 +1,4 @@
 import React from "react";
-import { ImGithub } from "react-icons/im";
 import {
   FaFacebookF,
   FaTwitter,
