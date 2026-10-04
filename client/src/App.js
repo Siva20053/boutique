@@ -1,61 +1,61 @@
-import React from "react";
-import {
-  createBrowserRouter,
-  Outlet,
-  RouterProvider,
-  ScrollRestoration,
-} from "react-router-dom";
-import { productsData } from "./api/Api";
-import Footer from "./components/Footer";
-import Header from "./components/Header";
-import Product from "./components/Product";
-import Home from "./Home";
-import Cart from "./pages/Cart";
-import Login from "./pages/Login";
+import React,{useEffect,useMemo,useState} from "react";
+import {BrowserRouter,Link,Navigate,Route,Routes,useParams,useSearchParams} from "react-router-dom";
+import {FaBars,FaTimes,FaSearch,FaWhatsapp,FaInstagram} from "react-icons/fa";
+import {HiOutlineShoppingBag,HiOutlinePlus,HiOutlinePencil,HiOutlineTrash,HiOutlineLogout} from "react-icons/hi";
+import {toast,ToastContainer} from "react-toastify";
+import {supabase,isSupabaseConfigured} from "./lib/supabase";
+import {categories as demoCategories,products as demoProducts,settings as demoSettings} from "./data/demoProducts";
+import "./index.css";
 
-const Layout = () => {
-  return (
-    <div>
-      <Header />
-      <ScrollRestoration />
-      <Outlet />
-      <Footer />
-    </div>
-  );
-};
+const money=n=>"₹"+Number(n||0).toLocaleString("en-IN");
+const price=p=>p.sale_price||p.price;
+const phone=n=>String(n||"").replace(/\D/g,"");
 
-const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <Layout />,
-    children: [
-      {
-        path: "/",
-        element: <Home />,
-        loader: productsData,
-      },
-      {
-        path: "/product/:id",
-        element: <Product />,
-      },
-      {
-        path: "/cart",
-        element: <Cart />,
-      },
-      {
-        path: "/login",
-        element: <Login />,
-      },
-    ],
-  },
-]);
+export default function App(){return <BrowserRouter><Routes><Route path="/admin/*" element={<Admin/>}/><Route path="*" element={<Store/>}/></Routes></BrowserRouter>}
 
-function App() {
-  return (
-    <div className="font-bodyFont">
-      <RouterProvider router={router} />
-    </div>
-  );
+function Store(){
+ const [data,setData]=useState({products:demoProducts,categories:demoCategories,settings:demoSettings});
+ const [cart,setCart]=useState(()=>JSON.parse(localStorage.getItem("inthi-cart")||"[]"));
+ useEffect(()=>localStorage.setItem("inthi-cart",JSON.stringify(cart)),[cart]);
+ useEffect(()=>{if(!supabase)return;Promise.all([
+  supabase.from("products").select("*,categories(name),product_images(image_url,sort_order),product_variants(*)").eq("is_active",true).order("created_at",{ascending:false}),
+  supabase.from("categories").select("*").eq("is_active",true).order("sort_order"),
+  supabase.from("store_settings").select("*").limit(1).maybeSingle()
+ ]).then(([p,c,s])=>{if(!p.error&&!c.error&&!s.error)setData({products:(p.data||[]).map(x=>({...x,category_name:x.categories?.name||"",image_url:x.product_images?.sort((a,b)=>a.sort_order-b.sort_order)[0]?.image_url||""})),categories:c.data||[],settings:s.data||demoSettings})}).catch(()=>{})},[]);
+ const add=x=>setCart(c=>{const e=c.find(i=>i.key===x.key);return e?c.map(i=>i.key===x.key?{...i,quantity:i.quantity+x.quantity}:i):[...c,x]});
+ const remove=k=>setCart(c=>c.filter(x=>x.key!==k));
+ const change=(k,n)=>setCart(c=>c.map(x=>x.key===k?{...x,quantity:Math.max(1,x.quantity+n)}:x));
+ const common={data,cart,add,remove,change,clear:()=>setCart([]),count:cart.reduce((a,x)=>a+x.quantity,0)};
+ return <><Header settings={data.settings} count={common.count}/><Routes>
+  <Route path="/" element={<Home {...common}/>}/><Route path="/shop" element={<Shop {...common}/>}/>
+  <Route path="/category/:category" element={<Shop {...common}/>}/><Route path="/product/:id" element={<Product {...common}/>}/>
+  <Route path="/cart" element={<Cart {...common}/>}/><Route path="/about" element={<About settings={data.settings}/>}/><Route path="/contact" element={<Contact settings={data.settings}/>}/>
+  <Route path="*" element={<Navigate to="/" replace/>}/></Routes><Footer settings={data.settings}/><ToastContainer position="bottom-right" theme="dark" autoClose={2200}/></>
 }
 
-export default App;
+function Header({settings,count}){const[open,setOpen]=useState(false),[search,setSearch]=useState(false);return <header className="site-header"><div className="nav-wrap"><button className="mobile-menu" onClick={()=>setOpen(!open)}>{open?<FaTimes/>:<FaBars/>}</button><Link className="brand" to="/"><img src={settings.logo_url||"/images/logoBoutique.png"} alt="Inthi"/></Link><nav className={open?"nav mobile-open":"nav"}><Link to="/">Home</Link><Link to="/shop">Collections</Link><Link to="/shop?new=true">New Arrivals</Link><Link to="/about">About</Link><Link to="/contact">Contact</Link></nav><div className="nav-actions"><button onClick={()=>setSearch(!search)}><FaSearch/></button><Link className="bag" to="/cart"><HiOutlineShoppingBag/><span>{count}</span></Link></div></div>{search&&<form className="search-bar" onSubmit={e=>{e.preventDefault();window.location.href="/shop?search="+encodeURIComponent(e.currentTarget.q.value)}}><input name="q" placeholder="Search collections..." autoFocus/><button>Search</button></form>}</header>}
+
+function Home({data,add}){const[slide,setSlide]=useState(0),b=["/images/banner2.jpg","/images/banner13.jfif","/images/banner44.jpg","/images/banner14.jfif"];useEffect(()=>{const t=setInterval(()=>setSlide(x=>(x+1)%4),5000);return()=>clearInterval(t)},[]);const latest=data.products.filter(x=>x.is_new_arrival).slice(0,4),featured=data.products.filter(x=>x.is_featured).slice(0,4);return <main><section className="hero"><div className="hero-track" style={{transform:"translateX(-"+slide*25+"%)"}}>{b.map(x=><img key={x} src={x} alt="Inthi collection"/>)}</div><div className="hero-copy"><p>THE NEW COLLECTION</p><h1>Discover Inthi</h1><Link className="btn light" to="/shop">SHOP COLLECTION</Link></div></section><section className="section"><Heading a="SHOP BY CATEGORY" b="Find something made for your style."/><div className="category-grid">{(data.categories.length?data.categories:demoCategories).map(c=><Link className="category-card" key={c.id} to={"/category/"+c.name}><img src={c.image_url} alt={c.name}/><span>{c.name}</span></Link>)}</div></section><Section title="NEW ARRIVALS" sub="Fresh pieces, thoughtfully selected for you." products={latest.length?latest:data.products} add={add}/><section className="story-band"><div><p className="eyebrow">THE INTHI EXPERIENCE</p><h2>Curated pieces for your everyday and every occasion.</h2><p>Personal assistance and easy WhatsApp ordering.</p><Link className="btn dark" to="/about">OUR STORY</Link></div><img src="/images/banner44.jpg" alt="Inthi"/></section><Section title="FEATURED COLLECTION" sub="Pieces we think you will love." products={featured.length?featured:data.products} add={add}/></main>}
+
+function Heading({a,b}){return <div className="section-heading"><p className="eyebrow">{a}</p><h2>{b}</h2></div>}
+function Section({title,sub,products,add}){return <section className="section"><Heading a={title} b={sub}/><div className="product-grid">{products.slice(0,4).map(p=><Card key={p.id} p={p} add={add}/>)}</div><div className="center"><Link className="text-link" to="/shop">VIEW ALL COLLECTIONS →</Link></div></section>}
+function Card({p,add}){const addIt=e=>{e.preventDefault();const v=(p.variants||[]).find(x=>x.stock>0);if(p.variants?.length&&!v)return toast.error("Out of stock");add({key:p.id+"-"+(v?.id||"default"),id:p.id,name:p.name,image_url:p.image_url,price:price(p),size:v?.size,color:v?.color,quantity:1});toast.success("Added to bag")};return <article className="product-card"><Link className="product-image-wrap" to={"/product/"+p.id}><img src={p.image_url||"/images/banner2.jpg"} alt={p.name}/>{(p.sale_price||p.is_new_arrival)&&<span className="badge">{p.sale_price?"SALE":"NEW"}</span>}</Link><div className="product-info"><p className="product-category">{p.category_name}</p><h3>{p.name}</h3><div className="price">{p.sale_price&&<del>{money(p.price)}</del>}<strong>{money(price(p))}</strong></div><button className="mini-add" onClick={addIt}>ADD TO BAG</button></div></article>}
+
+function Shop({data,add}){const[params]=useSearchParams(),{category}=useParams(),q=params.get("search")||"",onlyNew=params.get("new")==="true";const[sort,setSort]=useState("new");const list=useMemo(()=>{let x=[...data.products];if(q)x=x.filter(p=>p.name.toLowerCase().includes(q.toLowerCase()));if(onlyNew)x=x.filter(p=>p.is_new_arrival);if(category)x=x.filter(p=>(p.category_name||"").toLowerCase()===decodeURIComponent(category).toLowerCase());if(sort==="low")x.sort((a,b)=>price(a)-price(b));if(sort==="high")x.sort((a,b)=>price(b)-price(a));return x},[data.products,q,onlyNew,category,sort]);return <main className="section shop-page"><div className="shop-top"><div><p className="eyebrow">COLLECTIONS</p><h1>{category?decodeURIComponent(category):onlyNew?"New Arrivals":"All Collections"}</h1><p>{list.length} pieces</p></div><select value={sort} onChange={e=>setSort(e.target.value)}><option value="new">Newest</option><option value="low">Price: Low to High</option><option value="high">Price: High to Low</option></select></div><div className="product-grid">{list.map(p=><Card key={p.id} p={p} add={add}/>)}</div></main>}
+
+function Product({data,add}){const{id}=useParams(),p=data.products.find(x=>String(x.id)===id),[v,setV]=useState(null),[q,setQ]=useState(1);useEffect(()=>{setV(p?.variants?.find(x=>x.stock>0)||null)},[p]);if(!p)return <div className="empty section">Product not found.</div>;const variants=p.variants||[],sizes=[...new Set(variants.map(x=>x.size).filter(Boolean))],colors=[...new Set(variants.map(x=>x.color).filter(Boolean))];const choose=(s,c)=>setV(variants.find(x=>(s?x.size===s:true)&&(c?x.color===c:true)&&x.stock>0)||v);const addIt=()=>{if(variants.length&&!v)return toast.error("Please select an available option");add({key:p.id+"-"+(v?.id||"default"),id:p.id,name:p.name,image_url:p.image_url,price:price(p),size:v?.size,color:v?.color,quantity:q});toast.success("Added to bag")};return <main className="section product-page"><div className="product-detail"><img className="main-product-image" src={p.image_url||"/images/banner2.jpg"} alt={p.name}/><div className="product-copy"><p className="eyebrow">{p.category_name}</p><h1>{p.name}</h1><div className="price large">{p.sale_price&&<del>{money(p.price)}</del>}<strong>{money(price(p))}</strong></div><p className="description">{p.description}</p>{colors.length>0&&<div className="option"><label>Color</label><div className="options">{colors.map(c=><button key={c} className={v?.color===c?"selected":""} onClick={()=>choose(v?.size,c)}>{c}</button>)}</div></div>}{sizes.length>0&&<div className="option"><label>Size</label><div className="options">{sizes.map(s=><button key={s} disabled={!variants.some(x=>x.size===s&&x.stock>0)} className={v?.size===s?"selected":""} onClick={()=>choose(s,v?.color)}>{s}</button>)}</div></div>}<div className="quantity"><button onClick={()=>setQ(Math.max(1,q-1))}>−</button><span>{q}</span><button onClick={()=>setQ(q+1)}>+</button></div><button className="btn dark full" onClick={addIt}>ADD TO BAG</button><WhatsApp settings={data.settings} label="ASK ON WHATSAPP" product={p}/></div></div></main>}
+
+function Cart({data,cart,remove,change,clear}){const total=cart.reduce((a,x)=>a+x.price*x.quantity,0);const send=()=>{if(!data.settings.whatsapp)return toast.error("Configure WhatsApp in Admin → Store Settings.");const list=cart.map((x,i)=>(i+1)+". "+x.name+"\n   "+(x.size?"Size: "+x.size+"\n   ":"")+(x.color?"Color: "+x.color+"\n   ":"")+"Quantity: "+x.quantity+"\n   Price: "+money(x.price*x.quantity)).join("\n\n");const msg=(data.settings.whatsapp_template||demoSettings.whatsapp_template).replaceAll("{{store_name}}",data.settings.store_name||"Inthi").replaceAll("{{products}}",list).replaceAll("{{total}}",Number(total).toLocaleString("en-IN")).replaceAll("{{order_reference}}","INTHI-"+Math.floor(1000+Math.random()*9000));window.open("https://wa.me/"+phone(data.settings.whatsapp)+"?text="+encodeURIComponent(msg),"_blank")};return <main className="section cart-page"><p className="eyebrow">YOUR BAG</p><h1 className="page-title">Your selections</h1>{cart.length?<div className="cart-layout"><div>{cart.map(x=><div className="cart-row" key={x.key}><img src={x.image_url||"/images/banner2.jpg"} alt={x.name}/><div className="cart-name"><h3>{x.name}</h3><p>{[x.color,x.size].filter(Boolean).join(" · ")}</p><button onClick={()=>remove(x.key)}>Remove</button></div><strong>{money(x.price*x.quantity)}</strong><div className="quantity"><button onClick={()=>change(x.key,-1)}>−</button><span>{x.quantity}</span><button onClick={()=>change(x.key,1)}>+</button></div></div>)}</div><aside className="cart-summary"><p>Subtotal</p><h2>{money(total)}</h2><button className="btn dark full" onClick={send}><FaWhatsapp/> ORDER ON WHATSAPP</button><button className="text-link" onClick={clear}>CLEAR BAG</button></aside></div>:<Link className="btn dark" to="/shop">EXPLORE COLLECTIONS</Link>}</main>}
+
+function WhatsApp({settings,label,product}){if(!settings.whatsapp)return null;const msg=product?"Hello "+(settings.store_name||"Inthi")+" 👋\n\nI'm interested in: "+product.name+"\nPrice: "+money(price(product))+"\n\nPlease confirm availability.":"Hello "+(settings.store_name||"Inthi")+" 👋\n\nI'd like to know more about your collection.";return <a className="btn outline full" href={"https://wa.me/"+phone(settings.whatsapp)+"?text="+encodeURIComponent(msg)} target="_blank" rel="noreferrer"><FaWhatsapp/> {label}</a>}
+function About({settings}){return <main className="section text-page"><p className="eyebrow">ABOUT INTHI</p><h1>Curated style, personal service.</h1><p>Inthi is a boutique built around thoughtfully selected pieces for everyday elegance and special moments.</p><div className="story-grid"><img src="/images/banner14.jfif" alt="Inthi"/><div><h2>Visit us</h2><p>{settings.address}</p><p>{settings.opening_hours}</p></div></div></main>}
+function Contact({settings}){return <main className="section text-page"><p className="eyebrow">CONTACT</p><h1>Let's talk.</h1><p>Need help with a size, color or availability? Reach out directly.</p><div className="contact-grid"><div><h3>WhatsApp</h3><WhatsApp settings={settings} label="CHAT WITH US"/></div><div><h3>Store</h3><p>{settings.address}</p><p>{settings.opening_hours}</p></div></div></main>}
+function Footer({settings}){return <footer><div className="footer-grid"><div><img className="footer-logo" src={settings.logo_url||"/images/logoBoutique.png"} alt="Inthi"/><p>Curated fashion, personal service.</p><div className="socials">{settings.instagram&&<a href={settings.instagram}><FaInstagram/></a>}{settings.whatsapp&&<a href={"https://wa.me/"+phone(settings.whatsapp)}><FaWhatsapp/></a>}</div></div><div><h3>Explore</h3><Link to="/shop">Collections</Link><Link to="/shop?new=true">New Arrivals</Link><Link to="/about">About</Link></div><div><h3>Visit</h3><p>{settings.address}</p><p>{settings.opening_hours}</p></div><div><h3>Contact</h3><p>{settings.phone}</p><p>{settings.email}</p></div></div><div className="footer-bottom">© {new Date().getFullYear()} {settings.store_name||"Inthi"}. All rights reserved.</div></footer>}
+
+function Admin(){if(!isSupabaseConfigured)return <div className="admin-login"><div className="admin-box"><p className="eyebrow">INTHI ADMIN</p><h1>Connect Supabase</h1><p>Add REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY to use the admin.</p><Link className="btn dark" to="/">BACK TO STORE</Link></div></div>;return <AdminGate/>}
+function AdminGate(){const[s,setS]=useState(null),[loading,setLoading]=useState(true);useEffect(()=>{supabase.auth.getSession().then(r=>{setS(r.data.session);setLoading(false)});const x=supabase.auth.onAuthStateChange((_e,ss)=>setS(ss));return()=>x.data.subscription.unsubscribe()},[]);return loading?<div className="admin-loading">Loading…</div>:s?<Dashboard/>:<Login/>}
+function Login(){const[e,setE]=useState(""),[p,setP]=useState("");return <div className="admin-login"><form className="admin-box" onSubmit={async x=>{x.preventDefault();const{error}=await supabase.auth.signInWithPassword({email:e,password:p});if(error)toast.error(error.message)}}><p className="eyebrow">INTHI ADMIN</p><h1>Welcome back.</h1><input required type="email" placeholder="Email" value={e} onChange={x=>setE(x.target.value)}/><input required type="password" placeholder="Password" value={p} onChange={x=>setP(x.target.value)}/><button className="btn dark full">SIGN IN</button><Link className="text-link" to="/">← Back to store</Link></form></div>}
+function Dashboard(){const[tab,setTab]=useState("products"),[products,setProducts]=useState([]),[cats,setCats]=useState([]),[settings,setSettings]=useState(null),[edit,setEdit]=useState(null);const load=()=>Promise.all([supabase.from("products").select("*,categories(name),product_images(*),product_variants(*)").order("created_at",{ascending:false}),supabase.from("categories").select("*").order("sort_order"),supabase.from("store_settings").select("*").limit(1).maybeSingle()]).then(([p,c,s])=>{if(p.error||c.error||s.error)return toast.error((p.error||c.error||s.error).message);setProducts(p.data||[]);setCats(c.data||[]);setSettings(s.data||demoSettings)});useEffect(load,[]);if(!settings)return <div className="admin-loading">Loading dashboard…</div>;return <div className="admin-shell"><aside className="admin-sidebar"><Link className="admin-brand" to="/">INTHI</Link>{["products","categories","settings"].map(x=><button className={tab===x?"active":""} key={x} onClick={()=>setTab(x)}>{x}</button>)}<button onClick={async()=>{await supabase.auth.signOut();window.location.reload()}}><HiOutlineLogout/> Sign out</button></aside><section className="admin-content"><div className="admin-head"><div><p className="eyebrow">INTHI ADMIN</p><h1>{tab}</h1></div>{tab==="products"&&<button className="btn dark" onClick={()=>setEdit({name:"",price:"",description:"",category_id:"",is_new_arrival:false,is_featured:false,is_active:true,variants:[]})}><HiOutlinePlus/> ADD PRODUCT</button>}</div>{tab==="products"&&(edit?<Editor item={edit} cats={cats} done={()=>{setEdit(null);load()}}/>:<div className="admin-table">{products.map(p=><div className="admin-row" key={p.id}><img src={p.product_images?.[0]?.image_url||"/images/banner2.jpg"} alt=""/><div><strong>{p.name}</strong><small>{p.categories?.name||""} · {money(price(p))}</small></div><span>{(p.product_variants||[]).reduce((a,v)=>a+Number(v.stock||0),0)} stock</span><div><button onClick={()=>setEdit({...p,variants:p.product_variants||[]})}><HiOutlinePencil/></button><button onClick={async()=>{if(window.confirm("Delete product?")){await supabase.from("products").delete().eq("id",p.id);load()}}}><HiOutlineTrash/></button></div></div>)}</div>)}{tab==="categories"&&<CategoryAdmin cats={cats} load={load}/>} {tab==="settings"&&<SettingsAdmin settings={settings}/>}</section></div>}
+function Editor({item,cats,done}){const[f,setF]=useState(item),[v,setV]=useState(item.variants||[]);const save=async()=>{const payload={name:f.name,description:f.description,price:Number(f.price),sale_price:f.sale_price?Number(f.sale_price):null,category_id:f.category_id||null,is_new_arrival:!!f.is_new_arrival,is_featured:!!f.is_featured,is_active:f.is_active!==false};const q=f.id?supabase.from("products").update(payload).eq("id",f.id).select().single():supabase.from("products").insert(payload).select().single();const{data,error}=await q;if(error)return toast.error(error.message);await supabase.from("product_variants").delete().eq("product_id",data.id);if(v.length)await supabase.from("product_variants").insert(v.map(x=>({product_id:data.id,size:x.size||null,color:x.color||null,stock:Number(x.stock||0)})));toast.success("Saved");done()};return <div className="editor"><div className="form-grid"><label>Name<input value={f.name||""} onChange={e=>setF({...f,name:e.target.value})}/></label><label>Category<select value={f.category_id||""} onChange={e=>setF({...f,category_id:e.target.value})}><option value="">Select</option>{cats.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Price<input type="number" value={f.price||""} onChange={e=>setF({...f,price:e.target.value})}/></label><label>Sale price<input type="number" value={f.sale_price||""} onChange={e=>setF({...f,sale_price:e.target.value})}/></label><label className="wide">Description<textarea value={f.description||""} onChange={e=>setF({...f,description:e.target.value})}/></label></div><div className="variant-editor"><div className="editor-head"><h3>Variants & Stock</h3><button className="btn outline" onClick={()=>setV([...v,{size:"",color:"",stock:0}])}>+ VARIANT</button></div>{v.map((x,i)=><div className="variant-line" key={i}><input placeholder="Size" value={x.size||""} onChange={e=>{let a=[...v];a[i]={...a[i],size:e.target.value};setV(a)}}/><input placeholder="Color" value={x.color||""} onChange={e=>{let a=[...v];a[i]={...a[i],color:e.target.value};setV(a)}}/><input type="number" value={x.stock||0} onChange={e=>{let a=[...v];a[i]={...a[i],stock:e.target.value};setV(a)}}/><button onClick={()=>setV(v.filter((_,j)=>j!==i))}>×</button></div>)}</div><div className="checks"><label><input type="checkbox" checked={!!f.is_new_arrival} onChange={e=>setF({...f,is_new_arrival:e.target.checked})}/> New Arrival</label><label><input type="checkbox" checked={!!f.is_featured} onChange={e=>setF({...f,is_featured:e.target.checked})}/> Featured</label></div><button className="btn dark" onClick={save}>SAVE PRODUCT</button></div>}
+function CategoryAdmin({cats,load}){const[n,setN]=useState("");return <div className="admin-simple"><div className="inline-form"><input value={n} onChange={e=>setN(e.target.value)} placeholder="New category"/><button className="btn dark" onClick={async()=>{if(n){await supabase.from("categories").insert({name:n,sort_order:cats.length});setN("");load()}}}>ADD</button></div>{cats.map(c=><div className="simple-row" key={c.id}><span>{c.name}</span><button onClick={async()=>{await supabase.from("categories").delete().eq("id",c.id);load()}}><HiOutlineTrash/></button></div>)}</div>}
+function SettingsAdmin({settings}){const[f,setF]=useState(settings);return <div className="admin-simple form-grid"><label>Store name<input value={f.store_name||""} onChange={e=>setF({...f,store_name:e.target.value})}/></label><label>WhatsApp<input value={f.whatsapp||""} onChange={e=>setF({...f,whatsapp:e.target.value})}/></label><label>Phone<input value={f.phone||""} onChange={e=>setF({...f,phone:e.target.value})}/></label><label>Instagram<input value={f.instagram||""} onChange={e=>setF({...f,instagram:e.target.value})}/></label><label className="wide">Address<textarea value={f.address||""} onChange={e=>setF({...f,address:e.target.value})}/></label><label className="wide">Opening hours<textarea value={f.opening_hours||""} onChange={e=>setF({...f,opening_hours:e.target.value})}/></label><label className="wide">WhatsApp template<textarea value={f.whatsapp_template||""} onChange={e=>setF({...f,whatsapp_template:e.target.value})}/></label><div className="wide"><button className="btn dark" onClick={async()=>{const{error}=await supabase.from("store_settings").upsert({...f,id:f.id||1});if(error)toast.error(error.message);else toast.success("Settings saved")}}>SAVE SETTINGS</button></div></div>}
